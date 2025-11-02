@@ -10,6 +10,26 @@ hechos = (
     ('gastos', 'variables', 'intereses_deuda', 'alta')
 )
 
+ej_datos = {
+    'ingresos': 3000,
+    'gastos': {
+        'fijos': [
+            {'renta': 1000},
+            {'electricidad': 150},
+            {'telefono/internet': 100},
+            {'seguros': 200}
+            ],
+        'variables': [
+            {'comida': 400},
+            {'transporte': 150},
+            {'ropa': 100},
+            {'entretenimiento': 200},
+            {'intereses_deuda': 250}
+        ]
+    }
+}
+
+
 # Reglas 
 
 def hay_ingreso():
@@ -18,8 +38,12 @@ def hay_ingreso():
 def cumple_regla_50_30_20():
     return
 
-def requieres_ajuste():
-    return
+def requieres_ajuste(datos:dict):
+    if not datos: return "sin datos" 
+    ingresos = datos["ingresos"]
+    gastos_totales = sum(list(gasto.values())[0] for categoria in datos["gastos"].values() for gasto in categoria)
+    
+    return ingresos < gastos_totales
 
 def tiempo_para_ahorrar():
     return
@@ -38,3 +62,6 @@ def cumple_porcentaje_objetivo():
 
 def calcular_monto_recorte():
     return
+
+
+print(requieres_ajuste(ej_datos)) 
