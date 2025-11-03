@@ -8,14 +8,16 @@ hechos = (
     ('gastos', 'variables', 'transporte', 'media'),
     ('gastos', 'variables', 'ropa', 'baja'),
     ('gastos', 'variables', 'entretenimiento', 'baja'),
-    ('gastos', 'variables', 'intereses_deuda', 'alta')
+    ('gastos', 'variables', 'intereses deuda', 'alta'),
+    ('objetivo', .50, ('alta', 'media')),
+    ('objetivo', .30, 'baja')
 )
 
 ej_datos = {
     'ingresos': 1000,
     'gastos': {
         'fijos': [
-            {'renta': 100},
+            {'renta': 200},
             {'electricidad': 100},
             {'telefono/internet': 100},
             {'seguros': 100}
@@ -87,11 +89,11 @@ def obtener_prioridad(nombre, tipo, hechos, index=0):
     return obtener_prioridad(nombre, tipo, hechos, index + 1)
 
 # Reglas 
-
+#1
 def hay_ingreso(datos:dict):
     return datos.get("ingresos", 0) > 0
-
-def regla_50_30_20(datos:dict, hechos):
+#2
+def regla_50_30_20(datos:dict, hechos, existe_alta_media:bool=True):
     ingresos = datos["ingresos"]
     gastos = datos["gastos"]
     total_alta_media = sumar_prioridad(gastos, hechos, 'alta') + sumar_prioridad(gastos, hechos, 'media')
@@ -99,27 +101,29 @@ def regla_50_30_20(datos:dict, hechos):
 
     limite_alta_media = ingresos * 0.5
     limite_baja = ingresos * 0.3
-
-    return total_alta_media <= limite_alta_media and total_baja <= limite_baja
-
+    if existe_alta_media:
+        return total_alta_media <= limite_alta_media and total_baja <= limite_baja
+    else:
+        return total_baja <= limite_baja
+#3
 def requiere_ajustes(datos:dict):
     if not datos: return "sin datos" 
     ingresos = datos["ingresos"]
     gastos_totales = sumar_gastos(datos["gastos"])
     
     return ingresos < gastos_totales
-
+#4
 def tiempo_para_ahorrar(datos):
     ingresos = datos["ingresos"]
     meta_ahorro = datos["meta_ahorro"]
     gastos_totales = sumar_gastos(datos["gastos"])
     return math.ceil((meta_ahorro / (ingresos - gastos_totales)))
-
+#5
 def puede_ahorrar(datos:dict):
     ingresos = datos["ingresos"]
     gastos_totales = sumar_gastos(datos["gastos"])
     return ingresos > gastos_totales
-
+#6
 def existen_gastos_alta_media(gastos_dict, hechos, tipos=['fijos','variables'], tipo_index=0, gasto_index=0):
     # Caso base
     if tipo_index >= len(tipos):
@@ -141,20 +145,23 @@ def existen_gastos_alta_media(gastos_dict, hechos, tipos=['fijos','variables'], 
         return True
 
     return existen_gastos_alta_media(gastos_dict, hechos, tipos, tipo_index, gasto_index + 1)
-
-def calcular_deficit():
-    return
-
+#7
+def calcular_deficit(datos:dict):
+    ingresos = datos["ingresos"]
+    gastos = sumar_gastos(datos["gastos"])
+    return gastos - ingresos
+#8
 def cumple_porcentaje_objetivo():
     return
-
-def calcular_monto_recorte():
+#9
+def calcular_monto_recorte(datos:dict):
+    ingresos = datos["ingresos"]
     return
 
 
 # Consultas
 
-def meses_para_ahorrar(datos:dict):
+def cosulta_meses_para_ahorrar(datos:dict):
     if hay_ingreso(datos):
         if puede_ahorrar(datos):
             return tiempo_para_ahorrar(datos)
@@ -163,7 +170,7 @@ def meses_para_ahorrar(datos:dict):
     else:
         return "No hay ingresos registrados."
     
-def gastos_requieren_ajuste(datos:dict):
+def consulta_gastos_requieren_ajuste(datos:dict):
     if hay_ingreso(datos):
         if requiere_ajustes(datos):
             return "Los gastos requieren ajustes."
@@ -172,15 +179,12 @@ def gastos_requieren_ajuste(datos:dict):
     else:
         return "No es posible evaluar sin ingresos."
     
-def ingresos_cumplen_regla_50_30_20(datos:dict):
+def consulta_cumple_regla_50_30_20(datos:dict):
     if hay_ingreso(datos):
-        if regla_50_30_20():
-            return "Cumple la regla 50-30-20."
+        ex_alta_media = existen_gastos_alta_media(datos["gastos"], hechos)
+        if regla_50_30_20(datos, hechos, ex_alta_media):
+            return "Los ingresos cumplen con la regla 50/30/20."
         else:
-            return "No cumple la regla 50-30-20."
+            return "Los ingresos no cumplen con la regla 50/30/20."
     else:
         return "No es posible evaluar sin ingresos."
-
-print(meses_para_ahorrar(ej_datos))
-print(gastos_requieren_ajuste(ej_datos))
-print(regla_50_30_20(ej_datos, hechos))
