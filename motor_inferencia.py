@@ -1,6 +1,7 @@
 import math
 hechos = (
     ('gastos', 'fijos', 'renta', 'alta'),
+    ('gastos', 'fijos', 'agua', 'alta'),
     ('gastos', 'fijos', 'electricidad', 'alta'),
     ('gastos', 'fijos', 'telefono/internet', 'media'),
     ('gastos', 'fijos', 'seguros', 'media'),
