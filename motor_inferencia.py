@@ -11,9 +11,10 @@ hechos = (
     ('gastos', 'variables', 'entretenimiento', 'baja'),
     ('gastos', 'variables', 'intereses deuda', 'alta'),
     ('objetivo', .50, ('alta', 'media')),
-    ('objetivo', .30, 'baja')
+    ('objetivo', .30, ('baja',))
 )
 
+'''
 ej_datos = {
     'ingresos': 1000,
     'gastos': {
@@ -26,12 +27,13 @@ ej_datos = {
         'variables': [
             {'comida': 50},
             {'transporte': 50},
-            {'ropa': 100},
+            {'ropa': 250},
             {'entretenimiento': 100}
         ]
     },
     'meta_ahorro': 10000
 }
+'''
 
 # funciones auxiliares
 def sumar_gastos(gastos:dict, tipos=('fijos', 'variables'), tipo_index=0, gasto_index=0, total=0):
@@ -76,6 +78,20 @@ def sumar_prioridad(gastos: dict, hechos: tuple, prioridad_objetivo: str,
 
     return sumar_prioridad(gastos, hechos, prioridad_objetivo, tipos, tipo_index, gasto_index + 1, total)
 
+def obtener_objetivo(prioridades, hechos, index=0):
+    # Caso base
+    if index >= len(hechos):
+        return None
+
+    hecho = hechos[index]
+
+    if hecho[0] == 'objetivo':
+        _, valor, detalle = hecho
+        if any(p in detalle for p in prioridades):
+            return valor
+
+    return obtener_objetivo(prioridades, hechos, index + 1)
+
 
 def obtener_prioridad(nombre, tipo, hechos, index=0):
     # Caso base
@@ -88,6 +104,31 @@ def obtener_prioridad(nombre, tipo, hechos, index=0):
         return nivel
 
     return obtener_prioridad(nombre, tipo, hechos, index + 1)
+
+def obtener_prioridades_gastos(gastos: dict, hechos, tipos=('fijos', 'variables'), tipo_index=0, gasto_index=0, prioridades=None):
+    if prioridades is None:
+        prioridades = set()
+
+    # Caso base
+    if tipo_index >= len(tipos):
+        return prioridades
+
+    tipo_actual = tipos[tipo_index]
+    lista_gastos = gastos[tipo_actual]
+
+    # no hay más gastos de tipo actual
+    if gasto_index >= len(lista_gastos):
+        return obtener_prioridades_gastos(gastos, hechos, tipos, tipo_index + 1, 0, prioridades)
+
+    gasto = lista_gastos[gasto_index]
+    nombre = list(gasto.keys())[0]
+
+    prioridad = obtener_prioridad(nombre, tipo_actual, hechos)
+    if prioridad:
+        prioridades.add(prioridad)
+
+    return obtener_prioridades_gastos(gastos, hechos, tipos, tipo_index, gasto_index + 1, prioridades)
+
 
 # Reglas 
 #1
@@ -152,22 +193,82 @@ def calcular_deficit(datos:dict):
     gastos = sumar_gastos(datos["gastos"])
     return gastos - ingresos
 #8
-def cumple_porcentaje_objetivo():
-    return
-#9
-def calcular_monto_recorte(datos:dict):
+def cumple_porcentaje_objetivo(datos:dict, prioridades:list, hechos):
     ingresos = datos["ingresos"]
-    return
+    objetivo = obtener_objetivo(prioridades, hechos)
+    gasto_actual = 0
+    for prioridad in prioridades:
+        gasto_actual += sumar_prioridad(datos["gastos"], hechos, prioridad)
+    porcentaje_gasto = gasto_actual / ingresos
+    if porcentaje_gasto <= objetivo:
+        return True
+    else:
+        return False
+#9
+def calcular_monto_recorte(datos:dict, prioridades:list, hechos):
+    objetivo = obtener_objetivo(prioridades, hechos)
+    ingresos = datos["ingresos"]
+    gasto_actual = 0
+    for prioridad in prioridades:
+        gasto_actual += sumar_prioridad(datos["gastos"], hechos, prioridad)
+    return gasto_actual - (objetivo * ingresos)
+#10
+def existe_meta(datos:dict):
+    return "meta_ahorro" in datos and datos["meta_ahorro"] > 0
 
 
 # Consultas
+def que_gastos_ajustar(datos: dict):
+    if not hay_ingreso(datos):
+        return "No es posible evaluar sin ingresos."
+
+    if requiere_ajustes(datos):
+        deficit = calcular_deficit(datos)
+        return f"Los gastos superan los ingresos en ${deficit}. Se requieren recortes generales."
+
+    if regla_50_30_20(datos, hechos):
+        return "No se requieren ajustes en los gastos."
+
+    ingresos = datos["ingresos"]
+    prioridades_presentes = obtener_prioridades_gastos(datos["gastos"], hechos)
+
+    grupos_objetivo = {}
+    for prioridad in prioridades_presentes:
+        objetivo = obtener_objetivo([prioridad], hechos)
+        if objetivo not in grupos_objetivo:
+            grupos_objetivo[objetivo] = []
+        grupos_objetivo[objetivo].append(prioridad)
+
+    ajustes = []
+
+    for objetivo, prioridades in grupos_objetivo.items():
+        gasto_total = sum(
+            sumar_prioridad(datos["gastos"], hechos, p)
+            for p in prioridades
+        )
+        limite = ingresos * objetivo
+
+        if gasto_total > limite:
+            exceso = gasto_total - limite
+            prioridades_str = "/".join(prioridades)
+            ajustes.append(
+                f"Gastos con prioridad '{prioridades_str}' superan el límite de {objetivo*100:.0f}% por ${exceso:.2f}."
+            )
+
+    if not ajustes:
+        return "Los gastos están dentro de los límites de los objetivos definidos."
+
+    return "Ajustes recomendados:\n- " + "\n- ".join(ajustes)
 
 def cosulta_meses_para_ahorrar(datos:dict):
     if hay_ingreso(datos):
-        if puede_ahorrar(datos):
-            return tiempo_para_ahorrar(datos)
+        if existe_meta(datos):
+            if puede_ahorrar(datos):
+                return tiempo_para_ahorrar(datos)
+            else:
+                return "No puede ahorrar, se requieren ajustes en el presupuesto."
         else:
-            return "No puede ahorrar, se requieren ajustes en el presupuesto."
+            return "No se definio una meta de ahorro."
     else:
         return "No hay ingresos registrados."
     
@@ -189,3 +290,5 @@ def consulta_cumple_regla_50_30_20(datos:dict):
             return "Los ingresos no cumplen con la regla 50/30/20."
     else:
         return "No es posible evaluar sin ingresos."
+
+

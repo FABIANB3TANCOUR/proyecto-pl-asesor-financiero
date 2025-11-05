@@ -1,5 +1,5 @@
 from tkinter import messagebox
-from motor_inferencia import hechos, cosulta_meses_para_ahorrar, consulta_gastos_requieren_ajuste, consulta_cumple_regla_50_30_20
+from motor_inferencia import hechos, cosulta_meses_para_ahorrar, consulta_gastos_requieren_ajuste, consulta_cumple_regla_50_30_20, que_gastos_ajustar
 import tkinter as tk
 
 def generar_dict(entrada_gastos, entrada_ingreso, entrada_ahorro):
@@ -8,12 +8,16 @@ def generar_dict(entrada_gastos, entrada_ingreso, entrada_ahorro):
     except ValueError:
         messagebox.showerror("Error", "Por favor ingrese un valor valido para los ingresos.")
         return
-    try:
-        ahorro = float(entrada_ahorro.get())
-    except ValueError:
-        messagebox.showerror("Error", "Por favor ingrese un valor valido para la meta de ahorro.")
-        return
-    
+    ahorro_texto = entrada_ahorro.get().strip()
+    ahorro = None
+    if ahorro_texto != "":
+        try:
+            ahorro = float(ahorro_texto)
+        except ValueError:
+            messagebox.showerror("Error", "Por favor ingrese un valor válido para la meta de ahorro (o deje el campo vacío).")
+            return
+
+
     gastos_fijos = []
     gastos_variables = []
     
@@ -36,9 +40,11 @@ def generar_dict(entrada_gastos, entrada_ingreso, entrada_ahorro):
         "gastos": {
             "fijos": gastos_fijos,
             "variables": gastos_variables
-        },
-        "meta_ahorro": ahorro
+        }
     }
+    if ahorro is not None:
+        datos["meta_ahorro"] = ahorro
+
     return datos
 
 def enviar(entrada_gastos, entrada_ingreso, entrada_ahorro):
@@ -52,6 +58,8 @@ def enviar(entrada_gastos, entrada_ingreso, entrada_ahorro):
     btn_requiere_ajuste.pack(pady=5)
     btn_cumple_regla = tk.Button(ventana_consultas, text="¿Cumple regla 50-30-20?", font=("Helvetica", 12), command=lambda: print(consulta_cumple_regla_50_30_20(datos)))
     btn_cumple_regla.pack(pady=5)
+    btn_recortes = tk.Button(ventana_consultas, text="¿Qué gastos ajustar?", font=("Helvetica", 12), command=lambda: print(que_gastos_ajustar(datos)))
+    btn_recortes.pack(pady=5)
     btn_meses_ahorrar = tk.Button(ventana_consultas, text="¿Meses para ahorrar?", font=("Helvetica", 12), command=lambda: print(cosulta_meses_para_ahorrar(datos)))
     btn_meses_ahorrar.pack(pady=5)
 
