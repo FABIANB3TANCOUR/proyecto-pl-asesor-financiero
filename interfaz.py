@@ -1,39 +1,66 @@
-from tkinter import messagebox
-from motor_inferencia import hechos, cosulta_meses_para_ahorrar, consulta_gastos_requieren_ajuste, consulta_cumple_regla_50_30_20, que_gastos_ajustar
-import tkinter as tk
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout,
+    QHBoxLayout, QLabel, QCheckBox, QPushButton,
+    QLineEdit, QMessageBox, QGridLayout, QScrollArea, QFrame, QStackedWidget
+)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QDoubleValidator, QFont
+import math 
 
+# --- IMPORTACIONES DE TUS MÓDULOS ---
+from motor_inferencia import (
+    cosulta_meses_para_ahorrar, 
+    consulta_gastos_requieren_ajuste, 
+    consulta_cumple_regla_50_30_20, 
+    que_gastos_ajustar
+)
+from base_conocimiento import hechos
+# ------------------------------------
+
+# --- FUNCIÓN AUXILIAR PARA GENERAR DATOS (sin cambios) ---
 def generar_dict(entrada_gastos, entrada_ingreso, entrada_ahorro):
+    """
+    Genera el diccionario de datos financieros a partir de las entradas de la UI.
+    """
     try:
-        ingresos = float(entrada_ingreso.get())
+        ingresos = float(entrada_ingreso.text())
+        if ingresos <= 0:
+             QMessageBox.critical(None, "Error de Validación", "El ingreso debe ser un valor positivo.")
+             return None
     except ValueError:
-        messagebox.showerror("Error", "Por favor ingrese un valor valido para los ingresos.")
-        return
-    ahorro_texto = entrada_ahorro.get().strip()
+        QMessageBox.critical(None, "Error de Validación", "Por favor ingrese un valor válido para los ingresos.")
+        return None
+        
+    ahorro_texto = entrada_ahorro.text().strip()
     ahorro = None
-    if ahorro_texto != "":
+    if ahorro_texto:
         try:
             ahorro = float(ahorro_texto)
         except ValueError:
-            messagebox.showerror("Error", "Por favor ingrese un valor válido para la meta de ahorro (o deje el campo vacío).")
-            return
-
+            QMessageBox.critical(None, "Error de Validación", "Por favor ingrese un valor válido para la meta de ahorro (o deje el campo vacío).")
+            return None
 
     gastos_fijos = []
     gastos_variables = []
     
+    gastos_info = {}
     for hecho in hechos:
-        if hecho[0] == 'gastos' and hecho[2] in entrada_gastos:
-            try:
-                monto = float(entrada_gastos[hecho[2]].get())
-            except ValueError:
-                messagebox.showerror("Error", f"Por favor ingrese un valor valido para {hecho[2]}.")
-                return
+        if hecho[0] == 'gastos':
+            gastos_info[hecho[2]] = hecho[1] 
             
-            gasto = {hecho[2]: monto}
-            if hecho[1] == 'fijos':
-                gastos_fijos.append(gasto)
-            elif hecho[1] == 'variables':
-                gastos_variables.append(gasto)
+    for nombre_gasto, entry in entrada_gastos.items():
+        try:
+            monto = float(entry.text() if entry.text() else 0.0) 
+        except ValueError:
+            QMessageBox.critical(None, "Error de Validación", f"Por favor ingrese un valor válido para {nombre_gasto.capitalize()}.")
+            return None
+        
+        tipo_gasto = gastos_info.get(nombre_gasto)
+
+        if tipo_gasto == 'fijos':
+            gastos_fijos.append({nombre_gasto: monto})
+        elif tipo_gasto == 'variables':
+            gastos_variables.append({nombre_gasto: monto})
     
     datos = {
         "ingresos": ingresos,
@@ -47,90 +74,503 @@ def generar_dict(entrada_gastos, entrada_ingreso, entrada_ahorro):
 
     return datos
 
-def enviar(entrada_gastos, entrada_ingreso, entrada_ahorro):
-    datos = generar_dict(entrada_gastos, entrada_ingreso, entrada_ahorro)
-    # Ventana 3 - Para realizar consultas
-    ventana_consultas = tk.Toplevel(root)
-    ventana_consultas.title("Asesor Financiero - Consultas")
-    titulo = tk.Label(ventana_consultas, text="Consultas", font=("Helvetica", 16))
-    titulo.pack(pady=10)
-    btn_requiere_ajuste = tk.Button(ventana_consultas, text="¿Requiere ajuste?", font=("Helvetica", 12), command=lambda: print(consulta_gastos_requieren_ajuste(datos)))
-    btn_requiere_ajuste.pack(pady=5)
-    btn_cumple_regla = tk.Button(ventana_consultas, text="¿Cumple regla 50-30-20?", font=("Helvetica", 12), command=lambda: print(consulta_cumple_regla_50_30_20(datos)))
-    btn_cumple_regla.pack(pady=5)
-    btn_recortes = tk.Button(ventana_consultas, text="¿Qué gastos ajustar?", font=("Helvetica", 12), command=lambda: print(que_gastos_ajustar(datos)))
-    btn_recortes.pack(pady=5)
-    btn_meses_ahorrar = tk.Button(ventana_consultas, text="¿Meses para ahorrar?", font=("Helvetica", 12), command=lambda: print(cosulta_meses_para_ahorrar(datos)))
-    btn_meses_ahorrar.pack(pady=5)
+
+# ----------------------------------------------------------------------
+# VISTA 3: CONSULTAS 
+# ----------------------------------------------------------------------
+
+class VistaConsultas(QWidget):
+    def __init__(self, datos, main_window):
+        super().__init__()
+        self.datos = datos
+        self.main_window = main_window 
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #e0f2f7; 
+                font-family: 'Segoe UI', Arial, sans-serif;
+                color: #333333;
+            }
+            QLabel#Title {
+                color: #00796b; 
+                font-size: 26pt;
+                font-weight: bold;
+                padding: 15px 0;
+            }
+            QLabel { font-size: 11pt; }
+            QPushButton {
+                background-color: #00796b; 
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 15px;
+                font-size: 13pt;
+                font-weight: 600;
+                margin-top: 10px;
+                box-shadow: 2px 2px 5px rgba(0,0,0,0.2); 
+            }
+            QPushButton:hover { background-color: #004d40; }
+            QPushButton:pressed { background-color: #00382e; padding-top: 17px; padding-bottom: 13px; }
+            #BtnBack { background-color: #f44336; }
+            #BtnBack:hover { background-color: #d32f2f; }
+        """)
+        
+        titulo = QLabel("Análisis Financiero Detallado")
+        titulo.setObjectName("Title")
+        titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(titulo)
+        
+        # Botones de consulta
+        self._add_button(layout, "Evaluar Gastos (Vs. Ingresos)", consulta_gastos_requieren_ajuste)
+        self._add_button(layout, "Analizar Regla 50/30/20", consulta_cumple_regla_50_30_20)
+        self._add_button(layout, "Obtener Sugerencias de Ajuste", que_gastos_ajustar)
+        self._add_button(layout, "Calcular Tiempo para Meta de Ahorro", cosulta_meses_para_ahorrar)
+
+        # Botón para volver a la pantalla de ingreso de datos
+        btn_back = QPushButton("← Volver a Ingreso de Datos")
+        btn_back.setObjectName("BtnBack")
+        btn_back.clicked.connect(lambda: self.main_window.navigate_to(self.main_window.view_ingreso_datos_index))
+        layout.addWidget(btn_back)
 
 
-def confirmar(checkbox_vars):
-    gastos_seleccionados = []
-    for nombre, var in checkbox_vars.items():
-        if var.get() == 1:
-            gastos_seleccionados.append(nombre)
+    def _add_button(self, layout, text, func):
+        """Función auxiliar que CONECTA el botón y pasa su texto al handler."""
+        btn = QPushButton(text)
+        # CONEXIÓN SEGURA: Llama a handle_consulta y le pasa el texto del botón
+        btn.clicked.connect(lambda: self.handle_consulta(func(self.datos), text))
+        layout.addWidget(btn)
+        
+    def handle_consulta(self, resultado_motor, boton_texto):
+        """Función que recibe el resultado del motor y el texto del botón que lo activó."""
+        self.mostrar_resultado(resultado_motor, boton_texto)
+
+
+    def mostrar_resultado(self, resultado, boton_texto):
+        """
+        Maneja el resultado de la consulta, utilizando boton_texto para el chequeo de tipo.
+        """
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Resultado de la Consulta")
+
+        final_text = ""
+        
+        # --- Lógica de Formateo de Meses movida a la Interfaz ---
+        if isinstance(resultado, int) and boton_texto == "Calcular Tiempo para Meta de Ahorro":
+            # Si el resultado es un número entero, lo formateamos en la interfaz
+            
+            meses_total = resultado
+            meta = self.datos.get("meta_ahorro", 0.0)
+            ingresos = self.datos.get("ingresos", 0.0)
+            
+            # Replicar la lógica de sumar_gastos para el formateo
+            gastos_totales = 0
+            if "gastos" in self.datos:
+                for tipo in self.datos["gastos"]: 
+                    for item in self.datos["gastos"][tipo]:
+                        gastos_totales += list(item.values())[0]
+
+            ahorro_mensual = ingresos - gastos_totales
+            
+            # Cálculo de tiempo para presentación
+            años = math.floor(meses_total / 12)
+            meses_restantes = meses_total % 12
+            
+            nota_ahorro = ""
+            if gastos_totales == 0 and ahorro_mensual > 0:
+                # El escenario donde se asume el ahorro máximo
+                nota_ahorro = (
+                    f"\n\n***NOTA:*** El cálculo se basa en tu **Máxima Capacidad de Ahorro Teórico** "
+                    f"($\${ingresos:.2f}$) ya que no se ingresaron montos de gastos."
+                )
+
+            final_text = (
+                f"🎯 Meta: **${meta:.2f}**\n"
+                f" - Ahorro Mensual Disponible: **${ahorro_mensual:.2f}**\n"
+                f" - Se necesitan **{meses_total} meses** (aprox. {años} años y {meses_restantes} meses)."
+                f"{nota_ahorro}"
+            )
+
+        elif isinstance(resultado, str):
+            # Si es una cadena, la usamos directamente (es un error o el resultado de otra consulta)
+            final_text = resultado
+            
+        else:
+            final_text = "Error de datos: Resultado inesperado de la consulta."
+
+        # --- Fin Lógica de Formateo ---
+
+        msg.setText(final_text)
+        msg.setFont(QFont("Segoe UI", 10))
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: #ffffff;
+                color: #333333;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QMessageBox QLabel {
+                color: #333333;
+                font-size: 10pt;
+            }
+            QMessageBox QPushButton {
+                background-color: #00796b;
+                color: white;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-size: 10pt;
+            }
+            QMessageBox QPushButton:hover {
+                background-color: #004d40;
+            }
+        """)
+        msg.exec()
+
+# ----------------------------------------------------------------------
+# VISTA 2: INGRESO DE DATOS (sin cambios)
+# ----------------------------------------------------------------------
+
+class VistaIngresoDatos(QWidget):
+    def __init__(self, main_window):
+        super().__init__()
+        self.main_window = main_window
+        self.entrada_gastos = {}
+        self.entry_ingreso = None
+        self.entry_ahorro = None
+        self.gastos_seleccionados = []
+        self.gastos_info = self._load_gastos_info()
+        self.setup_ui()
+
+    def _load_gastos_info(self):
+        """Carga la clasificación (fijo/variable) de los gastos desde los hechos."""
+        info = {}
+        for hecho in hechos:
+            if hecho[0] == 'gastos':
+                info[hecho[2]] = hecho[1] # nombre_gasto: tipo_gasto
+        return info
+
+    def setup_ui(self):
+        main_layout = QVBoxLayout(self)
+        
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #f0f4f8; 
+                font-family: 'Segoe UI', Arial, sans-serif;
+                color: #333333;
+            }
+            QLabel#Title {
+                color: #2c3e50; 
+                font-size: 24pt;
+                font-weight: bold;
+                padding: 15px 0;
+            }
+            QLabel { color: #34495e; font-size: 11pt; }
+            QLineEdit {
+                border: 1px solid #bdc3c7; 
+                border-radius: 5px;
+                padding: 8px;
+                font-size: 11pt;
+                background-color: #ffffff; 
+            }
+            QLineEdit:focus { border: 1px solid #3498db; }
+            QPushButton {
+                background-color: #3498db; 
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 15px;
+                font-size: 16pt;
+                font-weight: 600;
+                margin-top: 20px;
+                box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+            }
+            QPushButton:hover { background-color: #2980b9; }
+            QPushButton:pressed { background-color: #21618c; padding-top: 17px; padding-bottom: 13px; }
+            #BtnBack { background-color: #95a5a6; }
+            #BtnBack:hover { background-color: #7f8c8d; }
+            QLabel#SectionHeader { color: #2c3e50; font-size: 16pt; font-weight: bold; margin-top: 15px; margin-bottom: 5px; }
+            QLabel#Tip { color: #e67e22; font-style: italic; font-size: 11pt; margin-bottom: 10px; }
+        """)
+
+        titulo = QLabel("Ingrese sus Datos Financieros")
+        titulo.setObjectName("Title")
+        titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(titulo)
+        
+        instruccion = QLabel("Complete los montos para un análisis preciso:")
+        instruccion.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        instruccion.setStyleSheet("font-size: 12pt; margin-bottom: 10px;")
+        main_layout.addWidget(instruccion)
+        
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.gastos_widget = QWidget()
+        self.gastos_layout = QVBoxLayout(self.gastos_widget) 
+        self.gastos_layout.setContentsMargins(15, 15, 15, 15)
+        self.gastos_layout.setSpacing(0)
+        self.scroll_area.setWidget(self.gastos_widget)
+        main_layout.addWidget(self.scroll_area)
+
+        self.validator = QDoubleValidator(0.0, 9999999.0, 2)
+        self.validator.setNotation(QDoubleValidator.StandardNotation)
+        
+        self.fijos_container = QWidget()
+        self.fijos_layout = QGridLayout(self.fijos_container)
+        self.variables_container = QWidget()
+        self.variables_layout = QGridLayout(self.variables_container)
+        
+        frame_ingreso = self._create_input_frame("💰 Ingresos mensuales:", False)
+        self.entry_ingreso = frame_ingreso.findChild(QLineEdit)
+        main_layout.addWidget(frame_ingreso)
+
+        frame_ahorro = self._create_input_frame("📈 Meta de ahorro (opcional):", True)
+        self.entry_ahorro = frame_ahorro.findChild(QLineEdit)
+        main_layout.addWidget(frame_ahorro)
+        
+        h_layout_buttons = QHBoxLayout()
+        
+        btn_back = QPushButton("← Cambiar Selección")
+        btn_back.setObjectName("BtnBack")
+        btn_back.clicked.connect(lambda: self.main_window.navigate_to(self.main_window.view_seleccion_index))
+        h_layout_buttons.addWidget(btn_back)
+
+        btn_enviar = QPushButton("Enviar Datos y Ver Análisis")
+        btn_enviar.clicked.connect(self.enviar)
+        h_layout_buttons.addWidget(btn_enviar)
+        
+        main_layout.addLayout(h_layout_buttons)
+
+    def _create_input_frame(self, label_text, is_optional):
+        frame = QFrame()
+        frame.setFrameShape(QFrame.StyledPanel)
+        frame.setFrameShadow(QFrame.Raised)
+        frame.setStyleSheet("QFrame { background-color: #eaf5f8; border-radius: 8px; padding: 10px; margin-top: 10px; }")
+        layout_frame = QHBoxLayout(frame)
+        label = QLabel(label_text)
+        entry = QLineEdit()
+        entry.setValidator(self.validator)
+        entry.setPlaceholderText("0.00" if not is_optional else "Dejar vacío si no aplica")
+        entry.setObjectName(label_text.split()[1].lower()) 
+        layout_frame.addWidget(label)
+        layout_frame.addWidget(entry)
+        return frame
+
+    def update_fields(self, gastos_seleccionados):
+        """Clasifica los gastos y actualiza la interfaz de ingresos."""
+        self.gastos_seleccionados = gastos_seleccionados
+        self.entrada_gastos = {}
+        
+        while self.gastos_layout.count():
+            child = self.gastos_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        gastos_fijos_lista = []
+        gastos_variables_lista = []
+
+        for gasto in gastos_seleccionados:
+            tipo = self.gastos_info.get(gasto)
+            if tipo == 'fijos':
+                gastos_fijos_lista.append(gasto)
+            elif tipo == 'variables':
+                gastos_variables_lista.append(gasto)
+
+        if gastos_fijos_lista:
+            header = QLabel("Gastos Fijos")
+            header.setObjectName("SectionHeader")
+            self.gastos_layout.addWidget(header)
+            
+            while self.fijos_layout.count():
+                 self.fijos_layout.takeAt(0).widget().deleteLater()
+
+            for row, gasto in enumerate(gastos_fijos_lista):
+                label = QLabel(f"{gasto.capitalize()}: ")
+                entry = QLineEdit()
+                entry.setPlaceholderText("0.00")
+                entry.setValidator(self.validator)
+                self.fijos_layout.addWidget(label, row, 0)
+                self.fijos_layout.addWidget(entry, row, 1)
+                self.entrada_gastos[gasto] = entry
+            
+            self.gastos_layout.addWidget(self.fijos_container)
+
+
+        if gastos_variables_lista:
+            header = QLabel("Gastos Variables")
+            header.setObjectName("SectionHeader")
+            self.gastos_layout.addWidget(header)
+            
+            tip = QLabel("TIP: Agrega lo **máximo** que estimes gastar en estos rubros.")
+            tip.setObjectName("Tip")
+            self.gastos_layout.addWidget(tip)
+
+            while self.variables_layout.count():
+                 self.variables_layout.takeAt(0).widget().deleteLater()
+
+            for row, gasto in enumerate(gastos_variables_lista):
+                label = QLabel(f"{gasto.capitalize()}: ")
+                entry = QLineEdit()
+                entry.setPlaceholderText("0.00")
+                entry.setValidator(self.validator)
+                self.variables_layout.addWidget(label, row, 0)
+                self.variables_layout.addWidget(entry, row, 1)
+                self.entrada_gastos[gasto] = entry
+            
+            self.gastos_layout.addWidget(self.variables_container)
+
+
+    def enviar(self):
+        """Genera el diccionario y navega a la vista de consultas."""
+        datos = generar_dict(self.entrada_gastos, self.entry_ingreso, self.entry_ahorro)
+        if datos:
+            vista_consultas = VistaConsultas(datos, self.main_window)
+            self.main_window.load_and_navigate(vista_consultas, self.main_window.view_consultas_index)
+            
+
+# ----------------------------------------------------------------------
+# VISTA 1: SELECCIÓN (sin cambios)
+# ----------------------------------------------------------------------
+
+class VistaSeleccion(QWidget):
+    def __init__(self, main_window):
+        super().__init__()
+        self.main_window = main_window
+        self.checkbox_vars = {}
+        self.setup_ui()
+
+    def setup_ui(self):
+        main_layout = QVBoxLayout(self)
+        
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #e0f7fa; 
+                font-family: 'Segoe UI', Arial, sans-serif;
+                color: #212121;
+            }
+            QLabel#Title {
+                color: #00796b; 
+                font-size: 30pt;
+                font-weight: bold;
+                padding: 20px 0;
+            }
+            QLabel { color: #424242; font-size: 12pt; }
+            QCheckBox { padding: 8px 0; font-size: 11pt; color: #333333; }
+            QCheckBox::indicator {
+                width: 18px; height: 18px; border: 1px solid #00796b; border-radius: 4px; background-color: white;
+            }
+            QCheckBox::indicator:checked { background-color: #00796b; }
+            QCheckBox:hover { color: #004d40; }
+            QPushButton {
+                background-color: #00796b; 
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 18px;
+                font-size: 18pt;
+                font-weight: 600;
+                margin-top: 25px;
+                box-shadow: 3px 3px 8px rgba(0,0,0,0.25); 
+            }
+            QPushButton:hover { background-color: #004d40; }
+            QPushButton:pressed { background-color: #00382e; padding-top: 20px; padding-bottom: 16px; box-shadow: 1px 1px 3px rgba(0,0,0,0.15); }
+        """)
+        
+        titulo = QLabel("Asesor Financiero Personal")
+        titulo.setObjectName("Title") 
+        titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(titulo)
+        
+        subtitulo = QLabel("1. Seleccione los gastos que desea incluir en el análisis:")
+        subtitulo.setStyleSheet("font-size: 14pt; margin-top: 15px; margin-bottom: 10px; color: #333333;")
+        subtitulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(subtitulo)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        frame = QWidget()
+        self.gastos_layout = QVBoxLayout(frame)
+        self.gastos_layout.setContentsMargins(20, 10, 20, 10) 
+        self.gastos_layout.setSpacing(5) 
+        scroll_area.setWidget(frame)
+        main_layout.addWidget(scroll_area)
+        
+        self.checkbox_vars = {}
+        
+        gastos_unicos = {}
+        for hecho in hechos:
+            if hecho[0] == 'gastos':
+                nombre_gasto = hecho[2]
+                if nombre_gasto not in gastos_unicos: 
+                    cb = QCheckBox(f"{nombre_gasto.capitalize()}")
+                    self.gastos_layout.addWidget(cb)
+                    self.checkbox_vars[nombre_gasto] = cb
+                    gastos_unicos[nombre_gasto] = True
+
+        btn_confirmar = QPushButton("2. Confirmar y Pasar a Ingresar Montos")
+        btn_confirmar.clicked.connect(self.confirmar)
+        main_layout.addWidget(btn_confirmar)
+
+    def confirmar(self):
+        gastos_seleccionados = []
+        for nombre, cb in self.checkbox_vars.items():
+            if cb.isChecked():
+                gastos_seleccionados.append(nombre)
+        
+        self.main_window.view_ingreso_datos.update_fields(gastos_seleccionados)
+        self.main_window.navigate_to(self.main_window.view_ingreso_datos_index)
+
+
+# ----------------------------------------------------------------------
+# VENTANA PRINCIPAL (Contenedor de Pila)
+# ----------------------------------------------------------------------
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Asesor Financiero Personal")
+        self.setMinimumSize(550, 700)
+        
+        self.stack_widget = QStackedWidget()
+        self.setCentralWidget(self.stack_widget)
+        
+        self.view_seleccion = VistaSeleccion(self)
+        self.view_ingreso_datos = VistaIngresoDatos(self)
+        self.view_consultas = QWidget() 
+
+        self.view_seleccion_index = self.stack_widget.addWidget(self.view_seleccion)
+        self.view_ingreso_datos_index = self.stack_widget.addWidget(self.view_ingreso_datos)
+        self.view_consultas_index = self.stack_widget.addWidget(self.view_consultas) 
+
+        self.navigate_to(self.view_seleccion_index)
+        
+    def navigate_to(self, index):
+        """Método simple para cambiar de vista en la pila."""
+        self.stack_widget.setCurrentIndex(index)
+
+    def load_and_navigate(self, new_widget, index):
+        """Reemplaza el widget en un slot y navega a él."""
+        
+        old_widget = self.stack_widget.widget(index)
+        
+        if old_widget:
+             self.stack_widget.removeWidget(old_widget)
+             old_widget.deleteLater()
+        
+        self.stack_widget.insertWidget(index, new_widget)
+        
+        self.stack_widget.setCurrentIndex(index)
+
+
+# ----------------------------------------------------------------------
+# EJECUCIÓN DE LA APLICACIÓN
+# ----------------------------------------------------------------------
+if __name__ == '__main__':
+    app = QApplication([])
     
-    # Ventana 2 - Para ingresar montos
-    ventana_gastos = tk.Toplevel(root)
-    ventana_gastos.title("Asesor Financiero - Ingreso de Gastos")
-    titulo = tk.Label(ventana_gastos, text="Ingreso de Datos", font=("Helvetica", 16))
-    titulo.pack(pady=10)
-    instruccion = tk.Label(ventana_gastos, text="Ingrese los montos de los gastos seleccionados:", font=("Helvetica", 12))
-    instruccion.pack(pady=5)
-    entrada_gastos = {}
-    for gasto in gastos_seleccionados:
-        frame_gasto = tk.Frame(ventana_gastos)
-        frame_gasto.pack(pady=5)
-        label = tk.Label(frame_gasto, text=f"{gasto.capitalize()}: ", font=("Helvetica", 10))
-        label.pack(side=tk.LEFT)
-        entry = tk.Entry(frame_gasto, font=("Helvetica", 10))
-        entry.pack(side=tk.LEFT)
-        entrada_gastos[gasto] = entry
-
-    frame_ingreso = tk.Frame(ventana_gastos)
-    frame_ingreso.pack(pady=5)
-    label_ingreso = tk.Label(frame_ingreso, text="Ingresos mensuales: ", font=("Helvetica", 10))
-    label_ingreso.pack(side=tk.LEFT)
-    entry_ingreso = tk.Entry(frame_ingreso, font=("Helvetica", 10))
-    entry_ingreso.pack(side=tk.LEFT)
-    entrada_ingreso = entry_ingreso
-
-    frame_ahorro = tk.Frame(ventana_gastos)
-    frame_ahorro.pack(pady=5)
-    label_ahorro = tk.Label(frame_ahorro, text="Meta de ahorro mensual (opcional): ", font=("Helvetica", 10))
-    label_ahorro.pack(side=tk.LEFT)
-    entry_ahorro = tk.Entry(frame_ahorro, font=("Helvetica", 10))
-    entry_ahorro.pack(side=tk.LEFT)
-    entrada_ahorro = entry_ahorro
+    app.setFont(QFont("Segoe UI", 10))
     
-
-
-    btn_enviar = tk.Button(ventana_gastos, text="Enviar", font=("Helvetica", 12), command=lambda: enviar(entrada_gastos, entrada_ingreso, entrada_ahorro))
-    btn_enviar.pack(pady=20)
-
-
-#Ventana principal - para seleccionar gastos
-root = tk.Tk()
-root.title("Asesor Financiero")
-root.geometry("500x600")
-titulo = tk.Label(root, text="Asesor Financiero", font=("Helvetica", 16))
-titulo.pack(pady=10)
-
-subtitulo = tk.Label(root, text="Seleccione los gastos con los que cuenta:", font=("Helvetica", 12))
-subtitulo.pack(pady=5)
-frame = tk.Frame(root)
-frame.pack(pady=10)
-
-checkbox_vars = {}
-# Checkboxes para gastos
-for hecho in hechos:
-    if hecho[0] == 'gastos':
-        var = tk.IntVar()
-        cb = tk.Checkbutton(frame, text=f"{hecho[2]}".capitalize(), variable=var, font=("Helvetica", 10))
-        cb.pack(anchor='w')
-        checkbox_vars[(hecho[2])] = var
-
-btn =  tk.Button(root, text="confirmar", font=("Helvetica", 12), command=lambda: confirmar(checkbox_vars))
-btn.pack(pady=20)
-
-root.mainloop()
+    main_window = MainWindow()
+    main_window.show()
+    app.exec()
